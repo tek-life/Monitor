@@ -137,11 +137,11 @@ class Monitor(threading.Thread):
           if id_n ==1:
             temp_tumple=parse_func[id_n](container_s[id_n])
             print dict(temp_tumple)
-            dict_info.update(dict(temp_tumple))
+            self.dict_info.update(dict(temp_tumple))
           elif id_n ==0:
-            dict_info.update(dict([parse_func[id_n](line) for line in container_s[id_n]]))
+            self.dict_info.update(dict([parse_func[id_n](line) for line in container_s[id_n]]))
           container_s[id_n][:]=[]
-          print dict_info
+          print self.dict_info
         else:
           container_s[id_n].append(l)
     
