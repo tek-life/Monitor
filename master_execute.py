@@ -60,9 +60,30 @@ memory_namedtuple=namedtuple("Memory",["label", "total", "used", "buffer_cache",
 #disk_nametuple=namedtuple()
 #network_nametuple=namedtuple()
 
-class Monitor(threading.Thread):
+"""
+ parse the recive data
+"""
+def parse_cpu(line):
+  fields = line.split()
+  return (fields[0], cpu_namedtuple(fields[0], *[int(x) for x in fields[1:8]]))
+
+def parse_memory(list_line):
+  total, buffers, cached, free, mapped= [int(x) for x in list_line[0].split(":")]
+  return [("Memory", memory_namedtuple("total", total=total, used=buffers, buffer_cache=cached, free=free, map_=mapped ))]
   pass
+def parse_disk():
+  pass
+def parse_network():
+  pass
+
+
+"""
+"""
+class Monitor(threading.Thread):
+  global template
+
   def __init__(self, host):
+    super(Monitor, self).__init__()
     self.host=host #Target
     """
      DataStructure for Parse
@@ -72,17 +93,21 @@ class Monitor(threading.Thread):
     self.parse_disk_container=[]
     self.parse_network_container=[]
 
-    self.container_s=(self.parse_cpu_container, self.parse_memory_container, self.parse_disk_container, self.parse_network_container)
+    self.dict_info = {}
+
   def run(self):
+    container_s=(self.parse_cpu_container, self.parse_memory_container, self.parse_disk_container, self.parse_network_container)
+    parse_func=(parse_cpu, parse_memory,parse_disk,parse_network)
     DEVNULL=open(os.devnull,'rb',0)
     #
     #Lock
+    script=template.replace('"',r'\"').replace('\n',r'\n')
     proc=subprocess.Popen(["ssh", self.host,"python -u -c \"{script}\"".format(script=script)],bufsize=1,stdin=DEVNULL,stderr=subprocess.STDOUT)# subprocess is process or thread?
     #End Lock
     
     sleep(3)
     conn=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    conn.connect((MONITOR_SITE,9000))
+    conn.connect((self.host,9000))
   
     with closing(conn.makefile()) as f2:
       while True:
@@ -90,7 +115,6 @@ class Monitor(threading.Thread):
         if l.startswith(prefix):
           tail = l.lstrip(prefix)
           if tail.startswith("cpu"):
-            container=parse_cpu_container
             id_n = 0
     #        parse_cpu()
     #        print tail
@@ -126,26 +150,8 @@ class Monitor(threading.Thread):
 
 
 
-"""
- parse the recive data
-"""
-def parse_cpu(line):
-  fields = line.split()
-  return (fields[0], cpu_namedtuple(fields[0], *[int(x) for x in fields[1:8]]))
-
-def parse_memory(list_line):
-  total, buffers, cached, free, mapped= [int(x) for x in list_line[0].split(":")]
-  return [("Memory", memory_namedtuple("total", total=total, used=buffers, buffer_cache=cached, free=free, map_=mapped ))]
-  pass
-def parse_disk():
-  pass
-def parse_network():
-  pass
-
-parse_func=(parse_cpu, parse_memory,parse_disk,parse_network)
-"""
-"""
-dict_info = {}
 
 if __name__=="__main__":
-  script=template.replace('"',r'\"').replace('\n',r'\n')
+  monitor=Monitor("127.0.0.1")
+  monitor.start()
+  monitor.join()
