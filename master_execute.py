@@ -36,7 +36,7 @@ def monitor_network(conn):
   conn.send(END+chr(10))
 
 s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("127.0.0.1",9000))
+s.bind(("0.0.0.0",9000))
 s.listen(5)
 s2,peer=s.accept()
 while True:
@@ -48,7 +48,6 @@ s2.close()
 ')"""
 
 #MASTER=""
-MONITOR_SITE="127.0.0.1" #just for test
 prefix="PIXIU-"
 
 """
@@ -71,7 +70,8 @@ def parse_memory(list_line):
   total, buffers, cached, free, mapped= [int(x) for x in list_line[0].split(":")]
   return [("Memory", memory_namedtuple("total", total=total, used=buffers, buffer_cache=cached, free=free, map_=mapped ))]
   pass
-def parse_disk():
+def parse_disk(lines):
+  self._filter = re.compile('^\s*(.+):\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+).*$')
   pass
 def parse_network():
   pass
@@ -102,10 +102,15 @@ class Monitor(threading.Thread):
     #
     #Lock
     script=template.replace('"',r'\"').replace('\n',r'\n')
-    proc=subprocess.Popen(["ssh", self.host,"python -u -c \"{script}\"".format(script=script)],bufsize=1,stdin=DEVNULL,stderr=subprocess.STDOUT)# subprocess is process or thread?
+    print script
+    proc=subprocess.Popen(["ssh", self.host,"python -u -c \"{script}\"".format(script=script)],bufsize=1,stdin=DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)# subprocess is process or thread?
     #End Lock
-    
-    sleep(3)
+    sleep(5)
+#    print proc.communicate()
+#    print self.host 
+#    while True:
+#        pass
+
     conn=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     conn.connect((self.host,9000))
   
@@ -154,8 +159,13 @@ class Monitor(threading.Thread):
 
 
 if __name__=="__main__":
-  monitor1=Monitor("127.0.0.1")
-  for _ in [monitor1,]:
+  host_template="10.20.0.{x}"
+  monitor_list = []
+  for index in [7,9,] :
+    host_Monitor = host_template.format(x = str(index))
+    monitor_list.append(Monitor(host_Monitor))
+    
+  for _ in monitor_list:
     _.start()
-  for _ in [monitor1,]:
+  for _ in monitor_list:
     _.join()
