@@ -136,8 +136,9 @@ class Monitor(threading.Thread):
         elif l.startswith("END-PIXIU"):
           if id_n ==1:
             temp_tumple=parse_func[id_n](container_s[id_n])
-            print dict(temp_tumple)
-            self.dict_info.update(dict(temp_tumple))
+            temp_dict = dict(temp_tumple)
+            temp_dict["host_name"] = self.host
+            self.dict_info.update(temp_dict)
           elif id_n ==0:
             self.dict_info.update(dict([parse_func[id_n](line) for line in container_s[id_n]]))
           container_s[id_n][:]=[]
@@ -146,12 +147,13 @@ class Monitor(threading.Thread):
           container_s[id_n].append(l)
     
       conn.close()
-      pass
 
 
 
 
 if __name__=="__main__":
-  monitor=Monitor("127.0.0.1")
-  monitor.start()
-  monitor.join()
+  monitor1=Monitor("127.0.0.1")
+  for _ in [monitor1,]:
+    _.start()
+  for _ in [monitor1,]:
+    _.join()
