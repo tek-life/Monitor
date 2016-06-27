@@ -2,7 +2,7 @@
 import socket
 import subprocess
 from contextlib import closing
-from time import sleep
+from time import sleep, time
 import os
 from collections import namedtuple
 import threading
@@ -114,6 +114,7 @@ class Monitor(threading.Thread):
         l=f2.readline()
         if l.startswith(prefix):
           tail = l.lstrip(prefix)
+	  cur_time = time() # The cur_time should be move out. Put it over the begin.
           if tail.startswith("cpu"):
             id_n = 0
     #        parse_cpu()
@@ -137,7 +138,8 @@ class Monitor(threading.Thread):
           if id_n ==1:
             temp_tumple=parse_func[id_n](container_s[id_n])
             temp_dict = dict(temp_tumple)
-            temp_dict["host_name"] = self.host
+            temp_dict["hostname"] = self.host
+	    temp_dict["timestamp"] = cur_time
             self.dict_info.update(temp_dict)
           elif id_n ==0:
             self.dict_info.update(dict([parse_func[id_n](line) for line in container_s[id_n]]))
