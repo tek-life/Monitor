@@ -36,8 +36,9 @@ def monitor_network(conn):
   conn.send(END+chr(10))
 
 s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("0.0.0.0",9000))
+s.bind(("0.0.0.0",0))
 s.listen(5)
+print s.getsockname()[1]
 s2,peer=s.accept()
 while True:
   monitor_cpu(s2)
@@ -81,6 +82,7 @@ def parse_network():
 """
 class Monitor(threading.Thread):
   global template
+  ssh_lock = threading.Lock()
 
   def __init__(self, host):
     super(Monitor, self).__init__()
@@ -92,8 +94,8 @@ class Monitor(threading.Thread):
     self.parse_memory_container=[]
     self.parse_disk_container=[]
     self.parse_network_container=[]
-
     self.dict_info = {}
+    self.port=0
 
   def run(self):
     container_s=(self.parse_cpu_container, self.parse_memory_container, self.parse_disk_container, self.parse_network_container)
@@ -102,17 +104,20 @@ class Monitor(threading.Thread):
     #
     #Lock
     script=template.replace('"',r'\"').replace('\n',r'\n')
-    print script
-    proc=subprocess.Popen(["ssh", self.host,"python -u -c \"{script}\"".format(script=script)],bufsize=1,stdin=DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)# subprocess is process or thread?
+    proc=None 
+    with Monitor.ssh_lock :
+      proc=subprocess.Popen(["ssh", self.host,"python -u -c \"{script}\"".format(script=script)],bufsize=1,stdin=DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)# subprocess is process or thread?
     #End Lock
-    sleep(5)
 #    print proc.communicate()
 #    print self.host 
 #    while True:
 #        pass
-
+    with proc.stdout as f:
+      self.port=int(f.readline())
+      print self.port,
+      
     conn=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    conn.connect((self.host,9000))
+    conn.connect((self.host,self.port))
   
     with closing(conn.makefile()) as f2:
       while True:
@@ -132,7 +137,7 @@ class Monitor(threading.Thread):
           if tail.startswith("disk"):
             id_n = 2
     #        container=parse_disk_container
-            parse_disk()
+    #        parse_disk()
     #        print tail
           if tail.startswith("network"):
             id_n = 3
