@@ -27,7 +27,7 @@ def monitor_memory(conn):
 def monitor_disk(conn):
   conn.send("PIXIU-disk"+chr(10))
   with open("/proc/diskstats") as f:
-    conn.send("".join([x for x in f.readlines() if x.split()[2].startswith("sda")]))
+    conn.send("".join([x for x in f.readlines() if not x.split()[2].startswith("loop") and not x.split()[2].startswith("ram") and x.split()[3]!="0"]))
   conn.send(END+chr(10))
 def monitor_network(conn):
   conn.send("PIXIU-network"+chr(10))
@@ -57,7 +57,7 @@ namedtuple
 
 cpu_namedtuple=namedtuple("CPU",["label", "user", "nice", "system", "idle", "iowait", "irq", "softirq"])
 memory_namedtuple=namedtuple("Memory",["label", "total", "used", "buffer_cache", "free", "map_"])
-#disk_nametuple=namedtuple()
+disk_nametuple=namedtuple("Disk", ["label", "io_read", "bytes_read", "time_spend_read", "io_write", "bytes_write", "time_spend_write"])
 #network_nametuple=namedtuple()
 
 """
@@ -72,9 +72,15 @@ def parse_memory(list_line):
   return [("Memory", memory_namedtuple("total", total=total, used=buffers, buffer_cache=cached, free=free, map_=mapped ))]
   pass
 def parse_disk(lines):
-  self._filter = re.compile('^\s*(.+):\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+).*$')
-  pass
+  def __parse_disk(_line):
+    line = _line.split()
+    return (line[2],disk_nametuple(line[2], io_read=int(line[3]), bytes_read=int(line[5])*512, time_spend_read=int(line[6])/1000.0,
+    io_write=int(line[7]), bytes_write=int(line[9])*512, time_spend_write=int(line[10])/1000.0))
+  
+  return dict([__parse_disk(line) for line in lines])
+
 def parse_network():
+#  _filter = re.compile('^\s*(.+):\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+).*$')
   pass
 
 
@@ -107,11 +113,7 @@ class Monitor(threading.Thread):
     proc=None 
     with Monitor.ssh_lock :
       proc=subprocess.Popen(["ssh", self.host,"python -u -c \"{script}\"".format(script=script)],bufsize=1,stdin=DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)# subprocess is process or thread?
-    #End Lock
-#    print proc.communicate()
-#    print self.host 
-#    while True:
-#        pass
+    
     with proc.stdout as f:
       self.port=int(f.readline())
       print self.port,
@@ -153,6 +155,9 @@ class Monitor(threading.Thread):
             self.dict_info.update(temp_dict)
           elif id_n ==0:
             self.dict_info.update(dict([parse_func[id_n](line) for line in container_s[id_n]]))
+          elif id_n == 2:
+            self.dict_info.update(parse_func[id_n](container_s[id_n]))
+            
           container_s[id_n][:]=[]
           print self.dict_info
         else:
