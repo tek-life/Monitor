@@ -6,6 +6,7 @@ from time import sleep, time
 import os
 from collections import namedtuple
 import threading
+import re
 
 template=r"""exec('
 import socket,time
@@ -32,7 +33,7 @@ def monitor_disk(conn):
 def monitor_network(conn):
   conn.send("PIXIU-network"+chr(10))
   with open("/proc/net/dev") as f:
-    conn.send("".join([x for x in f.readlines() if x.split()[0].startswith("eth")]))
+    conn.send("".join([x for x in f.readlines() if not x.split()[0].startswith("lo")]))
   conn.send(END+chr(10))
 
 s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -58,8 +59,11 @@ namedtuple
 cpu_namedtuple=namedtuple("CPU",["label", "user", "nice", "system", "idle", "iowait", "irq", "softirq"])
 memory_namedtuple=namedtuple("Memory",["label", "total", "used", "buffer_cache", "free", "map_"])
 disk_nametuple=namedtuple("Disk", ["label", "io_read", "bytes_read", "time_spend_read", "io_write", "bytes_write", "time_spend_write"])
+network_nametuple=namedtuple("Network", ['label', "recv_bytes", "recv_packets", "recv_errs", "recv_drop",
+                                "send_bytes", "send_packets", "send_errs", "send_drop"])
 #network_nametuple=namedtuple()
 
+network_filter = re.compile('^\s*(.+):\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+).*$')
 """
  parse the recive data
 """
@@ -79,9 +83,11 @@ def parse_disk(lines):
   
   return dict([__parse_disk(line) for line in lines])
 
-def parse_network():
-#  _filter = re.compile('^\s*(.+):\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+).*$')
-  pass
+def parse_network(line):
+  matched = network_filter.match(line)
+  if matched:
+    lists=matched.groups()
+    return (lists[0], network_nametuple(lists[0],*[int(x) for x in lists[1:]]))
 
 
 """
@@ -129,23 +135,12 @@ class Monitor(threading.Thread):
 	  cur_time = time() # The cur_time should be move out. Put it over the begin.
           if tail.startswith("cpu"):
             id_n = 0
-    #        parse_cpu()
-    #        print tail
           if tail.startswith("memory"):
             id_n = 1
-    #        container=parse_memory_container
-    #        parse_memory()
-    #        print tail
           if tail.startswith("disk"):
             id_n = 2
-    #        container=parse_disk_container
-    #        parse_disk()
-    #        print tail
           if tail.startswith("network"):
             id_n = 3
-    #        container=parse_network_container
-            parse_network()
-    #        print tail
         elif l.startswith("END-PIXIU"):
           if id_n ==1:
             temp_tumple=parse_func[id_n](container_s[id_n])
@@ -157,6 +152,8 @@ class Monitor(threading.Thread):
             self.dict_info.update(dict([parse_func[id_n](line) for line in container_s[id_n]]))
           elif id_n == 2:
             self.dict_info.update(parse_func[id_n](container_s[id_n]))
+          elif id_n == 3:
+            self.dict_info.update({"net":dict(filter(lambda x:x, [parse_func[id_n](line) for line in container_s[id_n]]))})
             
           container_s[id_n][:]=[]
           print self.dict_info
