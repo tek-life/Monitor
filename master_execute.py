@@ -17,24 +17,26 @@ def monitor_cpu(conn):
   with open("/proc/stat") as f:
     conn.send("".join([x for x in f.readlines() if x.startswith("cpu")]))
   conn.send(END+chr(10))
-  time.sleep(1)
+  time.sleep(5)
 def monitor_memory(conn):
   conn.send("PIXIU-memory"+chr(10))
   with open("/proc/meminfo") as f:
     mem = dict([(a, b.split()[0].strip()) for a, b in [x.split(":") for x in f.readlines()]])
     conn.send(":".join([mem[field] for field in ["MemTotal", "Buffers", "Cached", "MemFree", "Mapped"]])+chr(10))
   conn.send(END+chr(10))
-  time.sleep(1)
+  time.sleep(5)
 def monitor_disk(conn):
   conn.send("PIXIU-disk"+chr(10))
   with open("/proc/diskstats") as f:
     conn.send("".join([x for x in f.readlines() if not x.split()[2].startswith("loop") and not x.split()[2].startswith("ram") and x.split()[3]!="0"]))
   conn.send(END+chr(10))
+  time.sleep(5)
 def monitor_network(conn):
   conn.send("PIXIU-network"+chr(10))
   with open("/proc/net/dev") as f:
     conn.send("".join([x for x in f.readlines() if not x.split()[0].startswith("lo")]))
   conn.send(END+chr(10))
+  time.sleep(5)
 
 s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("0.0.0.0",0))
@@ -46,6 +48,7 @@ while True:
   monitor_memory(s2)
   monitor_disk(s2)
   monitor_network(s2)
+  s2.send("END------"+chr(10))
 s2.close()
 ')"""
 
@@ -127,9 +130,9 @@ class Monitor(threading.Thread):
     conn=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     conn.connect((self.host,self.port))
   
-    with closing(conn.makefile()) as f2:
+    with closing(conn.makefile()) as f:
       while True:
-        l=f2.readline()
+        l=f.readline()
         if l.startswith(prefix):
           tail = l.lstrip(prefix)
 	  cur_time = time() # The cur_time should be move out. Put it over the begin.
@@ -153,10 +156,13 @@ class Monitor(threading.Thread):
           elif id_n == 2:
             self.dict_info.update(parse_func[id_n](container_s[id_n]))
           elif id_n == 3:
-            self.dict_info.update({"net":dict(filter(lambda x:x, [parse_func[id_n](line) for line in container_s[id_n]]))})
-            
+            self.dict_info.update(dict(filter(lambda x:x,[parse_func[id_n](line) for line in container_s[id_n]])))
+        elif l.startswith("END------"):   
+          with open("/root/log.log",'a+') as f2:
+            f2.write(repr(self.dict_info)+"\n")
           container_s[id_n][:]=[]
-          print self.dict_info
+          self.dict_info.clear()
+
         else:
           container_s[id_n].append(l)
     
