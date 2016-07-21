@@ -175,11 +175,28 @@ class Monitor(threading.Thread):
           container_s[id_n].append(l)
     
       conn.close()
-
+def round_to_base(v, b):
+  for i in range(10):
+    base = int(b*10**i)
+    if abs(base-b*10**i) <0.001: break
+    assert base >0
+    return float(int(v*10**i)/base*base)/10**i
 
 def generate_report(log_path, output_path):
   with open(log_path) as f:
     datas=[eval(x) for x in f.readlines()]
+
+  hosts_list=list(set(x["hostname"] for x in datas))
+  datas_slices=groupby(datas, lambda x: round_to_base(x["timestamp"], 5))
+
+
+  memory_overall = ["x, free, buffer_cache, used"]
+
+  memory_count={}
+
+  for t, sub_data in datas_slices:
+    print t, sub_data
+    print -------------
   print datas
 
 if __name__=="__main__":
