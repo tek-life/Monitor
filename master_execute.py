@@ -61,10 +61,18 @@ namedtuple
 
 cpu_namedtuple=namedtuple("CPU",["label", "user", "nice", "system", "idle", "iowait", "irq", "softirq"])
 memory_namedtuple=namedtuple("Memory",["label", "total", "used", "buffer_cache", "free", "map_"])
-disk_nametuple=namedtuple("Disk", ["label", "io_read", "bytes_read", "time_spend_read", "io_write", "bytes_write", "time_spend_write"])
-network_nametuple=namedtuple("Network", ['label', "recv_bytes", "recv_packets", "recv_errs", "recv_drop",
+disk_namedtuple=namedtuple("Disk", ["label", "io_read", "bytes_read", "time_spend_read", "io_write", "bytes_write", "time_spend_write"])
+network_namedtuple=namedtuple("Network", ['label', "recv_bytes", "recv_packets", "recv_errs", "recv_drop",
                                 "send_bytes", "send_packets", "send_errs", "send_drop"])
-#network_nametuple=namedtuple()
+
+class CPU(cpu_namedtuple):
+  pass
+class Memory(memory_namedtuple):
+  pass
+class Disk(disk_namedtuple):
+  pass
+class Network(network_namedtuple):
+  pass
 
 network_filter = re.compile('^\s*(.+):\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+).*$')
 """
@@ -81,7 +89,7 @@ def parse_memory(list_line):
 def parse_disk(lines):
   def __parse_disk(_line):
     line = _line.split()
-    return (line[2],disk_nametuple(line[2], io_read=int(line[3]), bytes_read=int(line[5])*512, time_spend_read=int(line[6])/1000.0,
+    return (line[2],disk_namedtuple(line[2], io_read=int(line[3]), bytes_read=int(line[5])*512, time_spend_read=int(line[6])/1000.0,
     io_write=int(line[7]), bytes_write=int(line[9])*512, time_spend_write=int(line[10])/1000.0))
   
   return dict([__parse_disk(line) for line in lines])
@@ -90,7 +98,7 @@ def parse_network(line):
   matched = network_filter.match(line)
   if matched:
     lists=matched.groups()
-    return (lists[0], network_nametuple(lists[0],*[int(x) for x in lists[1:]]))
+    return (lists[0], network_namedtuple(lists[0],*[int(x) for x in lists[1:]]))
 
 
 """
@@ -169,11 +177,17 @@ class Monitor(threading.Thread):
       conn.close()
 
 
-
+def generate_report(log_path, output_path):
+  with open(log_path) as f:
+    datas=[eval(x) for x in f.readlines()]
+  print datas
 
 if __name__=="__main__":
   host_template="10.20.0.{x}"
   monitor_list = []
+  
+  generate_report("/root/log.log","/root/log.html")
+"""
   for index in [7,9,] :
     host_Monitor = host_template.format(x = str(index))
     monitor_list.append(Monitor(host_Monitor))
@@ -182,3 +196,4 @@ if __name__=="__main__":
     _.start()
   for _ in monitor_list:
     _.join()
+"""
