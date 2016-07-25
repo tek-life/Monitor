@@ -7,6 +7,7 @@ import os
 from collections import namedtuple
 import threading
 import re
+import itertools
 
 template=r"""exec('
 import socket,time
@@ -44,6 +45,7 @@ s.listen(5)
 print s.getsockname()[1]
 s2,peer=s.accept()
 while True:
+  s2.send("START------"+chr(10))
   monitor_cpu(s2)
   monitor_memory(s2)
   monitor_disk(s2)
@@ -65,9 +67,18 @@ disk_namedtuple=namedtuple("Disk", ["label", "io_read", "bytes_read", "time_spen
 network_namedtuple=namedtuple("Network", ['label', "recv_bytes", "recv_packets", "recv_errs", "recv_drop",
                                 "send_bytes", "send_packets", "send_errs", "send_drop"])
 
+class PatchedNameTuple(object):
+    def _add(self, other, override_title=None):
+        if other == None: return self
+        assert isinstance(other, self.__class__)
+        cls = self.__class__
+        title = self[0] if not override_title else override_title
+        return cls(title, *[a+b for a, b in zip(self[1:], other[1:])])
+
+
 class CPU(cpu_namedtuple):
   pass
-class Memory(memory_namedtuple):
+class Memory(memory_namedtuple, PatchedNameTuple):
   pass
 class Disk(disk_namedtuple):
   pass
@@ -141,9 +152,10 @@ class Monitor(threading.Thread):
     with closing(conn.makefile()) as f:
       while True:
         l=f.readline()
-        if l.startswith(prefix):
+        if l.startswith("START------"):
+          cur_time = time()
+        elif l.startswith(prefix):
           tail = l.lstrip(prefix)
-	  cur_time = time() # The cur_time should be move out. Put it over the begin.
           if tail.startswith("cpu"):
             id_n = 0
           if tail.startswith("memory"):
@@ -179,25 +191,83 @@ def round_to_base(v, b):
   for i in range(10):
     base = int(b*10**i)
     if abs(base-b*10**i) <0.001: break
-    assert base >0
-    return float(int(v*10**i)/base*base)/10**i
+  assert base >0
+  return float(int(v*10**i)/base*base)/10**i
+
+def samedir(fn):
+  """
+  return abspath of fn in the same directory where this python file stores
+  """
+  return os.path.abspath(os.path.join(os.path.dirname(__file__), fn))
+
 
 def generate_report(log_path, output_path):
   with open(log_path) as f:
     datas=[eval(x) for x in f.readlines()]
 
   hosts_list=list(set(x["hostname"] for x in datas))
-  datas_slices=groupby(datas, lambda x: round_to_base(x["timestamp"], 5))
+
+  datas_slices=itertools.groupby(datas, lambda x: round_to_base(x['timestamp'], 5))
 
 
   memory_overall = ["x, free, buffer_cache, used"]
+  cpu_heatmap = ["x,y,value,hostname,coreid"]
+  cpu_overall = ["x,idle,user,system,iowait,others"]
+  network_heatmap = ["x,y,value,hostname,adapterid"]
+  network_overall = ["x,recv_bytes,send_bytes,|recv_packets,send_packets,errors"]
+  diskio_heatmap = ["x,y,value,hostname,diskid"]
+  diskio_overall = ["x,read_bytes,write_bytes,|read_io,write_io"]
+  memory_heatmap = ["x,y,value,hostname"]
+  procload_heatmap = ["x,y,value,hostname"]
+  procload_overall = ["x,load5,load10,load15,|running,procs"]
+    #events = parse_bench_log(benchlog_fn)
+
+  cpu_count={}
+  network_count={}
+  diskio_count={}
+  proc_count={}
+
 
   memory_count={}
 
   for t, sub_data in datas_slices:
-    print t, sub_data
-    print -------------
-  print datas
+    classes_by_host=dict([(x['hostname'],x) for x in sub_data])
+    all_data=[classes_by_host.get(x,{}) for x in hosts_list]
+
+    summary_memory=[x['Memory'] for x in all_data if x.has_key('Memory')]
+    if summary_memory:
+      summed=reduce(lambda x,y:x._add(y),[x for x in summary_memory])
+      memory_overall.append("{time},{free},{buffer_cache},{used}" \
+                                      .format(time = int(t),
+                                              free = summed.free,
+                                              used = summed.used,
+                                              buffer_cache = summed.buffer_cache))
+
+  with open(samedir("chart-template.html")) as f:
+        template = f.read()
+
+  variables = locals()
+  def my_replace(match):
+    match = match.group()[1:-1]
+    if match.endswith('heatmap') or match.endswith('overall'):
+      return "\n".join(variables[match])
+    elif match == 'probe_interval':
+      return str(5 * 1000)
+    else:
+      return '{%s}' % match
+
+  with open(output_path, 'w') as f:
+    f.write(re.sub(r'{\w+}', my_replace, template))
+
+
+  print "xxxxxxxxxxx"
+    
+  """
+    for k,value in classes_by_host:
+      print k
+      print value
+  """
+  #print datas
 
 if __name__=="__main__":
   host_template="10.20.0.{x}"
